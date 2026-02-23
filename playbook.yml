@@ -1,0 +1,144 @@
+---
+- name: Despliegue de DNS y DHCP en Rocky Linux 9
+  hosts: all
+  become: true
+  vars:
+    domain_name: "infra.local"
+    server_ip: "192.168.50.10"
+    network_base: "192.168.50"
+    subnet_mask: "255.255.255.0"
+
+  tasks:
+    - name: Instalar Bind (DNS) y servidor DHCP
+      dnf:
+        name:
+          - bind
+          - bind-utils
+          - dhcp-server
+          - firewalld
+        state: present
+
+    - name: Iniciar y habilitar Firewalld
+      systemd:
+        name: firewalld
+        state: started
+        enabled: yes
+
+    - name: Permitir servicios DNS y DHCP en el Firewall
+      firewalld:
+        service: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - dns
+        - dhcp
+
+    # CONFIGURACIÓN DHCP
+    - name: Configurar archivo principal dhcpd.conf
+      copy:
+        dest: /etc/dhcp/dhcpd.conf
+        content: |
+          # Configuración global
+          option domain-name "{{ domain_name }}";
+          option domain-name-servers {{ server_ip }};
+          default-lease-time 600;
+          max-lease-time 7200;
+          authoritative;
+
+          # Definición de la subred para la interfaz de Vagrant
+          subnet {{ network_base }}.0 netmask {{ subnet_mask }} {
+            range {{ network_base }}.50 {{ network_base }}.100;
+            option routers {{ server_ip }};
+          }
+
+    # CONFIGURACIÓN DNS (BIND9)
+    - name: Configurar archivo principal named.conf
+      copy:
+        dest: /etc/named.conf
+        content: |
+          options {
+              listen-on port 53 { 127.0.0.1; {{ server_ip }}; };
+              directory       "/var/named";
+              dump-file       "/var/named/data/cache_dump.db";
+              statistics-file "/var/named/data/named_stats.txt";
+              memstatistics-file "/var/named/data/named_mem_stats.txt";
+              allow-query     { localhost; {{ network_base }}.0/24; };
+              recursion yes;
+          };
+
+          logging {
+              channel default_debug {
+                  file "data/named.run";
+                  severity dynamic;
+              };
+          };
+
+          zone "." IN {
+              type hint;
+              file "named.ca";
+          };
+
+          include "/etc/named.rfc1912.zones";
+          include "/etc/named.root.key";
+
+          # Zona Directa
+          zone "{{ domain_name }}" IN {
+              type master;
+              file "{{ domain_name }}.zone";
+              allow-update { none; };
+          };
+
+          # Zona Inversa
+          zone "50.168.192.in-addr.arpa" IN {
+              type master;
+              file "{{ network_base }}.rev.zone";
+              allow-update { none; };
+          };
+
+    - name: Crear archivo de zona directa
+      copy:
+        dest: /var/named/{{ domain_name }}.zone
+        owner: root
+        group: named
+        mode: '0640'
+        content: |
+          $TTL 86400
+          @   IN  SOA     server.{{ domain_name }}. root.{{ domain_name }}. (
+                          2026022301 ; Serial
+                          3600       ; Refresh
+                          1800       ; Retry
+                          604800     ; Expire
+                          86400 )    ; Minimum TTL
+          @   IN  NS      server.{{ domain_name }}.
+          server IN  A       {{ server_ip }}
+
+    - name: Crear archivo de zona inversa
+      copy:
+        dest: /var/named/{{ network_base }}.rev.zone
+        owner: root
+        group: named
+        mode: '0640'
+        content: |
+          $TTL 86400
+          @   IN  SOA     server.{{ domain_name }}. root.{{ domain_name }}. (
+                          2026022301 ; Serial
+                          3600       ; Refresh
+                          1800       ; Retry
+                          604800     ; Expire
+                          86400 )    ; Minimum TTL
+          @   IN  NS      server.{{ domain_name }}.
+          10  IN  PTR     server.{{ domain_name }}.
+
+    # REINICIO Y HABILITACIÓN DE SERVICIOS
+    - name: Iniciar y habilitar servicio Bind (DNS)
+      systemd:
+        name: named
+        state: restarted
+        enabled: yes
+
+    - name: Iniciar y habilitar servicio DHCP
+      systemd:
+        name: dhcpd
+        state: restarted
+        enabled: yes
