@@ -6,6 +6,7 @@ Vagrant.configure("2") do |config|
     server.vm.hostname = "server.local"
     server.vm.network "private_network", ip: "192.168.50.10", virtualbox__intnet: "infra_net"
     
+    server.vm.provision "file", source: "playbook.yml", destination: "/home/vagrant/playbook.yml"
     server.vm.provision "ansible_local" do |ansible|
       ansible.playbook = "playbook.yml"
     end
