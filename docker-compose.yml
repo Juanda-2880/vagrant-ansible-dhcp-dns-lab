@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  rocky9-test:
+    build: .
+    container_name: rocky9-test
+    privileged: true # Requerido para systemd
+    cgroupns: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    tmpfs:
+      - /run
+      - /run/lock
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "67:67/udp"
+    networks:
+      - internal_net
+
+networks:
+  internal_net:
+    driver: bridge
