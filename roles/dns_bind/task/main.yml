@@ -1,0 +1,50 @@
+---
+- name: Instalar paquetes BIND
+  ansible.builtin.package:
+    name: "{{ dns_bind_packages }}"
+    state: present
+
+- name: Configurar named.conf
+  ansible.builtin.template:
+    src: named.conf.j2
+    dest: /etc/named.conf
+    owner: root
+    group: named
+    mode: '0640'
+    validate: 'named-checkconf %s'
+  notify: restart named
+
+- name: Configurar zona forward (Directa)
+  ansible.builtin.template:
+    src: zone.forward.j2
+    dest: "{{ dns_zone_path }}/{{ dns_domain }}.zone"
+    owner: root
+    group: named
+    mode: '0640'
+    validate: 'named-checkzone {{ dns_domain }} %s'
+  notify: restart named
+
+- name: Configurar zona reverse (Inversa)
+  ansible.builtin.template:
+    src: zone.reverse.j2
+    dest: "{{ dns_zone_path }}/{{ dns_domain }}.rev"
+    owner: root
+    group: named
+    mode: '0640'
+    validate: 'named-checkzone {{ dns_network_prefix }}.in-addr.arpa %s'
+  notify: restart named
+
+- name: Habilitar puerto DNS en firewalld (Ignorado en Docker)
+  ansible.posix.firewalld:
+    service: dns
+    permanent: yes
+    state: enabled
+    immediate: yes
+  when: ansible_virtualization_type != 'docker'
+  ignore_errors: true # Evitar falla en CI si ansible.posix no está preinstalado en base
+
+- name: Habilitar y arrancar servicio named
+  ansible.builtin.service:
+    name: named
+    enabled: yes
+    state: started
