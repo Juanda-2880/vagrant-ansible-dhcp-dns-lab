@@ -1,0 +1,17 @@
+$TTL 86400
+@   IN  SOA     ns1.{{ dns_domain }}. admin.{{ dns_domain }}. (
+        {{ dns_zone_serial }}  ; Serial
+        3600        ; Refresh
+        1800        ; Retry
+        604800      ; Expire
+        86400 )     ; Minimum TTL
+
+; Name Servers
+@   IN  NS      ns1.{{ dns_domain }}.
+
+; PTR Records (Automáticos basados en IP completa y prefijo)
+{% for record in dns_records %}
+{% if record.type == 'A' and record.data.startswith(dns_network_prefix | split('.') | reverse | join('.')) %}
+{{ record.data.split('.')[-1] }}    IN  PTR     {{ record.host }}.{{ dns_domain }}.
+{% endif %}
+{% endfor %}
