@@ -1,0 +1,36 @@
+---
+# ==========================================
+# VARIABLES GLOBALES: DNS (BIND) & DHCP
+# ==========================================
+
+# -- Configuración DNS (BIND) --
+dns_domain: "ejemplo.local"
+dns_listen_ip: "192.168.100.10"
+dns_allow_query: "192.168.100.0/24"
+dns_forwarders:
+  - "8.8.8.8"
+  - "1.1.1.1"
+dns_zone_serial: "2026022501" # Mantener fijo o actualizar manualmente para idempotencia
+dns_network_prefix: "100.168.192" # Formato inverso de red (192.168.100.0/24)
+
+dns_records:
+  - { host: "router", type: "A", data: "192.168.100.1" }
+  - { host: "ns1", type: "A", data: "192.168.100.10" }
+  - { host: "www", type: "CNAME", data: "ns1" }
+
+# -- Configuración DHCP (dhcpd) --
+dhcp_interface: "eth0"
+dhcp_domain_name: "{{ dns_domain }}"
+dhcp_dns_servers: "{{ dns_listen_ip }}"
+dhcp_default_lease: 600
+dhcp_max_lease: 7200
+
+dhcp_subnet: "192.168.100.0"
+dhcp_netmask: "255.255.255.0"
+dhcp_range_start: "192.168.100.100"
+dhcp_range_end: "192.168.100.200"
+dhcp_router: "192.168.100.1"
+dhcp_broadcast: "192.168.100.255"
+
+dhcp_reservations:
+  - { name: "admin-pc", mac: "00:11:22:33:44:55", ip: "192.168.100.50" }
